@@ -1,4 +1,4 @@
-package persistence
+package database
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Vighnesh-V-H/async/internal/logger"
-	"github.com/Vighnesh-V-H/async/internal/models"
 	"github.com/rs/zerolog"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -58,18 +57,6 @@ func InitDB(ctx context.Context, connection string, logCfg logger.Config) (*gorm
             Msg("Database connection pool configured")
 
         dbLog.Info().Msg("Starting database migration")
-        
-        if err = db.WithContext(ctx).AutoMigrate(
-            &models.Workflow{},
-            &models.WorkflowInstance{},
-            &models.Task{},
-            &models.HistoryEntry{},
-            &models.WorkflowRegistry{},
-        ); err != nil {
-            initErr = fmt.Errorf("migration failed: %w", err)
-            dbLog.Error().Err(err).Msg("Database migration failed")
-            return
-        }
 
         dbLog.Info().
             Strs("models", []string{"Workflow", "WorkflowInstance", "Task", "HistoryEntry", "WorkflowRegistry"}).

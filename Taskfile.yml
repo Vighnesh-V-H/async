@@ -1,0 +1,63 @@
+version: "3"
+
+dotenv:
+  - .env
+
+vars:
+  SPEEDAI_DB_DSN: "{{.SPEEDAI_DB_DSN}}"
+
+tasks:
+  help:
+    desc: print this help message
+    cmds:
+      - task --list-all
+    silent: true
+
+  confirm:
+    desc: confirmation prompt
+    cmds:
+      - |
+        echo -n 'Are you sure? [y/N] ' && read ans && [ ${ans:-N} = y ]
+    silent: true
+    internal: true
+
+  run:
+    desc: run the cmd/async  application with Air live reload
+    cmds:
+      - air -c .air.toml
+
+  migrations:new:
+    desc: create a new Goose migration
+    vars:
+      NAME: '{{.name | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.NAME}}" ]; then
+          echo "Error: name parameter is required"
+          echo "Usage: task migrations:new name=migration_name"
+          exit 1
+        fi
+      - echo "Creating Goose migration file for {{.NAME}}..."
+      - goose -dir ./pkg/database/migrations create {{.NAME}} sql
+
+  migrations:up:
+    desc: apply all up database migrations using Goose
+    cmds:
+      - echo 'Running up migrations for speedai...'
+      - goose -dir ./pkg/database/migrations postgres "{{.DATABASE_URL}}" up
+
+  migrations:down:
+    desc: roll back last migration using Goose
+    cmds:
+      - echo 'Rolling back last migration for speedai...'
+      - goose -dir ./pkg/database/migrations postgres "{{.DATABASE_URL}}" down
+
+  tidy:
+    desc: format all .go files, and tidy and vendor module dependencies
+    cmds:
+      - echo 'Formatting .go files...'
+      - go fmt ./...
+      - echo 'Tidying module dependencies...'
+      - go mod tidy
+      - echo 'Verifying dependencies...'
+      - go mod verify

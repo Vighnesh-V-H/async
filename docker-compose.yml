@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   db:
@@ -7,11 +6,15 @@ services:
     restart: always
     shm_size: 128mb
     environment:
+      POSTGRES_USER: pg
       POSTGRES_PASSWORD: pradyuman
+      POSTGRES_DB: db
+    ports:
+      - 5432:5432
     volumes:
       - ./volumes/db:/var/lib/postgresql/data
     networks:
-      - neuralsync-network
+      - async-network
 
   adminer:
     image: adminer
@@ -21,7 +24,7 @@ services:
     depends_on:
       - db
     networks:
-      - neuralsync-network
+      - async-network
 
   redis:
     image: redis:7-alpine
@@ -38,7 +41,7 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - neuralsync-network
+      - async-network
 
   kafka:
     image: confluentinc/cp-kafka:7.7.0
@@ -61,7 +64,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk1uNkJKZEtSNA=="
     volumes:
-      - kafka-data:/var/lib/kafka/data
+      - ./volumes/kafka:/var/lib/kafka/data
+    networks:
+      - async-network
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
