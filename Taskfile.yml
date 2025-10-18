@@ -26,6 +26,11 @@ tasks:
     cmds:
       - air -c .air.toml
 
+  run:orc:
+    desc: run the orchestrator application
+    cmds:
+      - go run cmd/orchestrator/main.go
+
   migrations:new:
     desc: create a new Goose migration
     vars:
