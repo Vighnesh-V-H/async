@@ -1,0 +1,48 @@
+name: audio-generation-workflow
+version: 1.0
+triggers:
+  - type: webhook
+    event: "file.uploaded"
+    payload_schema: { file_url: string }
+
+states:
+  - id: extract_text
+    type: ai_task
+    model: "gpt-4"  # Or local Ollama
+    prompt: "Extract transcript from audio at {{inputs.file_url}}: {{context}}"
+    inputs: { file_url: "{{trigger.file_url}}" }
+    on_success: convert_to_audio
+    on_failure: notify_error
+    retries: 2
+    timeout: 60s
+
+  - id: convert_to_audio
+    type: task  # Custom executor
+    action: "tts_generate"  # Maps to worker handler
+    inputs: { text: "{{prev.output.transcript}}" }
+    on_success: upload_audio
+    on_failure: retry_or_error
+
+  - id: upload_audio
+    type: http_call
+    method: POST
+    url: "https://storage.api/store/audio"
+    body: { audio_blob: "{{prev.output.audio_data}}", metadata: "{{vars}}" }
+    on_success: send_notification
+    retries: 3
+
+  - id: send_notification
+    type: notification
+    channels: [email: "user@example.com", slack: "#uploads"]
+    message: "Audio ready: {{prev.output.audio_url}}"
+
+  - id: notify_error
+    type: notification
+    channels: [email: "admin@example.com"]
+    message: "Failed: {{error}}"
+
+  - id: retry_or_error
+    type: decision
+    condition: "{{prev.retries < 3}}"
+    true: extract_text  # Loop back
+    false: notify_error

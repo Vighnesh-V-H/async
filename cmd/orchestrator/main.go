@@ -9,38 +9,41 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Vighnesh-V-H/async/internal/events"
 	"github.com/Vighnesh-V-H/async/internal/handler"
 	"github.com/Vighnesh-V-H/async/internal/logger"
+	"github.com/Vighnesh-V-H/async/internal/orchestrator"
 	"github.com/Vighnesh-V-H/async/internal/repositories"
 	"github.com/Vighnesh-V-H/async/internal/router"
 	"github.com/Vighnesh-V-H/async/internal/service"
 	"github.com/Vighnesh-V-H/async/pkg/database"
+	"github.com/Vighnesh-V-H/async/pkg/kafka"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
 
 func main() {
 
-  erro := godotenv.Load(".env")
-  if erro != nil {
-    log.Fatal("Error loading .env file")
-  }
+	erro := godotenv.Load(".env")
+	if erro != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	logCfg := logger.Config{
-		Level:   getEnv("LOG_LEVEL", "info"),
-		Format:  getEnv("LOG_FORMAT", "json"),
+		Level:  getEnv("LOG_LEVEL", "info"),
+		Format: getEnv("LOG_FORMAT", "json"),
 	}
 
 	log := logger.New(logCfg)
 
-	dbURL :=os.Getenv("DATABASE_URL")
-	if dbURL==""{
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
 		log.Error().Msg("Failed to get database url")
 	}
-		
+
 	log.Info().Msg("Initializing database connection")
 
 	db, err := database.InitDB(ctx, dbURL, logCfg)
@@ -56,26 +59,61 @@ func main() {
 
 	log.Info().Msg("Database initialized successfully")
 
+	log.Info().Msg("Initializing Kafka producer")
+	kafkaProducer, err := kafka.InitProducer()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize Kafka producer")
+	}
+	defer kafka.Close()
+
+	log.Info().Msg("Kafka producer initialized successfully")
+
+	log.Info().Msg("Initializing Kafka consumer for task completions")
+	kafkaConsumer, err := kafka.InitConsumer("orchestrator-group", "task-completions")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize Kafka consumer")
+	}
+
+	log.Info().Msg("Kafka consumer initialized successfully")
+
+	eventProducer := events.NewEventProducer(kafkaProducer, logCfg)
+	eventConsumer := events.NewEventConsumer(kafkaConsumer, logCfg)
+	log.Info().Msg("Event producer and consumer initialized")
+
 	workflowRepo := repositories.NewWorkflowRepository(db)
-	log.Info().Msg("Workflow repository initialized")
+	instanceRepo := repositories.NewInstanceRepository(db)
+	log.Info().Msg("Repositories initialized")
 
 	workflowService := service.NewWorkflowService(workflowRepo)
-	log.Info().Msg("Workflow service initialized")
+	instanceService := service.NewInstanceService(instanceRepo)
+	log.Info().Msg("Services initialized")
+
+	orch := orchestrator.NewOrchestrator(workflowService, instanceService, eventProducer, logCfg)
+	log.Info().Msg("Orchestrator state machine initialized")
 
 	workflowHandler := handler.NewWorkflowHandler(workflowService)
-	log.Info().Msg("Workflow handler initialized")
+	audioHandler := handler.NewAudioHandler(workflowService, instanceService, eventProducer)
+	log.Info().Msg("Handlers initialized")
+
+	go func() {
+		log.Info().Msg("Starting Kafka consumer for task completions")
+		if err := eventConsumer.ConsumeCompletions(ctx, orch.ProcessCompletion); err != nil {
+			log.Error().Err(err).Msg("Kafka consumer stopped")
+		}
+	}()
 
 	ginRouter := gin.Default()
-	
+
 	ginRouter.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
+			"status":  "ok",
 			"service": "orchestrator",
 		})
 	})
 
 	router.SetupWorkflowRoutes(ginRouter, workflowHandler)
-	log.Info().Msg("Workflow routes configured")
+	router.SetupAudioRoutes(ginRouter, audioHandler)
+	log.Info().Msg("Routes configured")
 
 	port := getEnv("PORT", "8080")
 	srv := &http.Server{
@@ -97,7 +135,7 @@ func main() {
 	<-sigChan
 
 	log.Info().Msg("Shutting down gracefully...")
-	
+
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 

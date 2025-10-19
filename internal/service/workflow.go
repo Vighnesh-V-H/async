@@ -38,3 +38,8 @@ func (s *WorkflowService) CreateWorkflow(ctx context.Context, req CreateWorkflow
     }
     return wf, nil
 }
+
+// GetWorkflowByEvent retrieves a workflow by event name
+func (s *WorkflowService) GetWorkflowByEvent(ctx context.Context, event string) (*models.Workflow, error) {
+    return s.repo.GetByEvent(ctx, event)
+}

@@ -23,3 +23,13 @@ func (r *WorkflowRepository) Create(ctx context.Context, wf *models.Workflow) er
         return nil
     })
 }
+
+// GetByEvent retrieves a workflow by event name
+func (r *WorkflowRepository) GetByEvent(ctx context.Context, event string) (*models.Workflow, error) {
+    var wf models.Workflow
+    err := r.db.WithContext(ctx).Where("event = ? AND status = ?", event, "active").First(&wf).Error
+    if err != nil {
+        return nil, err
+    }
+    return &wf, nil
+}
