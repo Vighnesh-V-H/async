@@ -17,15 +17,13 @@ var (
 	logg         zerolog.Logger
 )
 
-// SetLogger allows injecting a custom zerolog logger (useful for tests or callers
-// that already have a configured logger).
+
 func SetLogger(z zerolog.Logger) {
 	logg = z
 }
 
 func init() {
-	// Initialize a default logger using environment variables. This mirrors the
-	// logger.Config used across the project. Callers can override with SetLogger.
+	
 	cfg := lg.Config{
 		Level:       os.Getenv("LOG_LEVEL"),
 		Format:      os.Getenv("LOG_FORMAT"),
