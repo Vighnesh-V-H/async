@@ -69,7 +69,7 @@ func main() {
 	log.Info().Msg("Kafka producer initialized successfully")
 
 	log.Info().Msg("Initializing Kafka consumer for task completions")
-	kafkaConsumer, err := kafka.InitConsumer("orchestrator-group", "task-completions")
+	kafkaConsumer, err := kafka.InitConsumer("orchestrator-group", "task-queue")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize Kafka consumer")
 	}
