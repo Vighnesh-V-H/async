@@ -279,7 +279,7 @@ Access Adminer at http://localhost:7080 to:
 - Run SQL queries
 - Monitor workflow instances
 
-## 📋 TODO & Roadmap
+## 📋 TODO
 
 ### High Priority - Core Features
 - [ ] **Authentication & Authorization**: Implement JWT-based auth middleware for API endpoints
@@ -288,63 +288,6 @@ Access Adminer at http://localhost:7080 to:
 - [ ] **Task Executors**: Build pluggable task executor system with sample implementations
 - [ ] **Retry & Timeout Logic**: Implement exponential backoff and task timeout handling
 - [ ] **Dead Letter Queue**: Add DLQ for failed tasks with manual intervention support
-
-### Medium Priority - Production Readiness
 - [ ] **API Rate Limiting**: Add rate limiting middleware to prevent abuse
-- [ ] **Request Validation**: Comprehensive input validation for all API endpoints
-- [ ] **Error Handling**: Standardized error responses and error codes
-- [ ] **Graceful Degradation**: Circuit breakers for external service calls
-- [ ] **Database Connection Pooling**: Optimize database connections with proper pooling
-- [ ] **Metrics & Tracing**: Integrate Prometheus metrics and distributed tracing
-- [ ] **API Documentation**: Generate OpenAPI/Swagger documentation
-- [ ] **Unit & Integration Tests**: Comprehensive test coverage (target: >80%)
 
-### Low Priority - Enhanced Features
-- [ ] **Webhook Support**: Implement webhook notifications for workflow events
-- [ ] **Conditional Branching**: Support for complex workflow conditions
-- [ ] **Parallel Task Execution**: Execute multiple tasks concurrently
-- [ ] **Scheduled Workflows**: Cron-based workflow triggers
-- [ ] **Workflow Versioning**: Support multiple versions of same workflow
-- [ ] **Admin Dashboard**: Web UI for workflow management
-- [ ] **CLI Tool**: Command-line tool for workflow operations
-- [ ] **Multi-tenancy**: Support for isolated tenant workspaces
 
-### Infrastructure & DevOps
-- [ ] **Kubernetes Deployment**: Helm charts for K8s deployment
-- [ ] **CI/CD Pipeline**: GitHub Actions for automated testing and deployment
-- [ ] **Docker Images**: Multi-stage Docker builds for all services
-- [ ] **Performance Testing**: Load testing and benchmarking
-- [ ] **Security Audit**: Dependency scanning and security best practices
-- [ ] **Backup & Recovery**: Automated database backup strategy
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-Built with these excellent open-source projects:
-- [Gin](https://github.com/gin-gonic/gin) - HTTP web framework
-- [GORM](https://gorm.io/) - ORM library
-- [Confluent Kafka Go](https://github.com/confluentinc/confluent-kafka-go) - Kafka client
-- [Zerolog](https://github.com/rs/zerolog) - Structured logging
-- [Redis](https://redis.io/) - In-memory data store
-- [PostgreSQL](https://www.postgresql.org/) - Relational database
-
-## 📧 Contact
-
-For questions and support, please open an issue on GitHub.
-
----
-
-**Note**: This is an active development project. APIs and features may change. Check the TODO section for planned improvements and current limitations.
