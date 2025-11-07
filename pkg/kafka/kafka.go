@@ -1,10 +1,10 @@
 package kafka
 
 import (
-	"os"
+	"strings"
 	"sync"
 
-	lg "github.com/Vighnesh-V-H/async/internal/logger"
+	config "github.com/Vighnesh-V-H/async/configs"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/rs/zerolog"
 )
@@ -15,39 +15,35 @@ var (
 	initOnce     sync.Once
 	initConsumer sync.Once
 	logg         zerolog.Logger
+	kafkaCfg     *config.KafkaConfig
 )
-
 
 func SetLogger(z zerolog.Logger) {
 	logg = z
 }
 
-func init() {
-	
-	cfg := lg.Config{
-		Level:       os.Getenv("LOG_LEVEL"),
-		Format:      os.Getenv("LOG_FORMAT"),
-		ServiceName: "async-kafka",
-		Environment: os.Getenv("ENVIRONMENT"),
-		IsProd:      os.Getenv("ENVIRONMENT") == "prod" || os.Getenv("ENVIRONMENT") == "production",
-	}
-	logg = lg.New(cfg)
+func SetConfig(cfg *config.KafkaConfig) {
+	kafkaCfg = cfg
 }
 
-func InitProducer() (*kafka.Producer, error) {
+func InitProducer(cfg *config.KafkaConfig, log zerolog.Logger) (*kafka.Producer, error) {
 	var err error
+	logg = log
+	kafkaCfg = cfg
+	
 	initOnce.Do(func() {
 		p, e := kafka.NewProducer(&kafka.ConfigMap{
-			"bootstrap.servers":    os.Getenv("KAFKA_BROKERS"),
-			"acks":                 "all",
-			"retries":              3,
-			"linger.ms":            5,
-			"compression.type":     "gzip",
-			"request.timeout.ms":   30000,
-			"delivery.timeout.ms":  120000,
+			"bootstrap.servers":    strings.Join(cfg.Brokers, ","),
+			"acks":                 cfg.ProducerAcks,
+			"retries":              cfg.ProducerRetries,
+			"linger.ms":            cfg.ProducerLingerMs,
+			"compression.type":     cfg.CompressionType,
+			"request.timeout.ms":   cfg.RequestTimeoutMs,
+			"delivery.timeout.ms":  cfg.DeliveryTimeoutMs,
 		})
 		if e != nil {
 			err = e
+			logg.Error().Err(e).Msg("Failed to create Kafka producer")
 			return
 		}
 		
@@ -71,29 +67,42 @@ func InitProducer() (*kafka.Producer, error) {
 		}()
 		
 		producer = p
-		logg.Info().Msg("Kafka Producer initialized")
+		logg.Info().
+			Strs("brokers", cfg.Brokers).
+			Str("acks", cfg.ProducerAcks).
+			Int("retries", cfg.ProducerRetries).
+			Msg("Kafka Producer initialized")
 	})
 	return producer, err
 }
 
-func InitConsumer(groupID, topic string) (*kafka.Consumer, error) {
+func InitConsumer(cfg *config.KafkaConfig, log zerolog.Logger) (*kafka.Consumer, error) {
 	var err error
+	logg = log
+	kafkaCfg = cfg
+	
 	initConsumer.Do(func() {
 		c, e := kafka.NewConsumer(&kafka.ConfigMap{
-			"bootstrap.servers":  os.Getenv("KAFKA_BROKERS"),
-			"group.id":           groupID,
-			"auto.offset.reset":  "earliest",
-			"enable.auto.commit": false,
+			"bootstrap.servers":  strings.Join(cfg.Brokers, ","),
+			"group.id":           cfg.ConsumerGroupID,
+			"auto.offset.reset":  cfg.AutoOffsetReset,
+			"enable.auto.commit": cfg.EnableAutoCommit,
+			"session.timeout.ms": cfg.SessionTimeoutMs,
 		})
 		if e != nil {
 			err = e
+			logg.Error().Err(e).Msg("Failed to create Kafka consumer")
 			return
 		}
-		if err = c.SubscribeTopics([]string{topic}, nil); err != nil {
+		if err = c.SubscribeTopics([]string{cfg.ConsumerTopic}, nil); err != nil {
+			logg.Error().Err(err).Str("topic", cfg.ConsumerTopic).Msg("Failed to subscribe to topic")
 			return
 		}
 		consumer = c
-		logg.Info().Str("topic", topic).Msg("Kafka Consumer initialized")
+		logg.Info().
+			Str("topic", cfg.ConsumerTopic).
+			Str("group_id", cfg.ConsumerGroupID).
+			Msg("Kafka Consumer initialized")
 	})
 	return consumer, err
 }

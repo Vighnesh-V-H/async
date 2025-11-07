@@ -28,7 +28,7 @@ type CompletionEvent struct {
 	WorkflowID  uint                   `json:"workflow_id"`
 	TaskType    string                 `json:"task_type"`
 	Step        uint8                  `json:"step"`
-	Status      string                 `json:"status"` // "success" or "failed"
+	Status      string                 `json:"status"` 
 	Output      map[string]interface{} `json:"output"`
 	Error       string                 `json:"error,omitempty"`
 	Timestamp   string                 `json:"timestamp"`
@@ -57,7 +57,6 @@ func (ep *EventProducer) PublishTask(topic string, event *TaskEvent) error {
 		Value: payload,
 	}
 
-	// Produce asynchronously - delivery reports will be handled by the Events() goroutine
 	if err := ep.producer.Produce(msg, nil); err != nil {
 		ep.logger.Error().Err(err).Str("topic", topic).Msg("Failed to produce task event")
 		return fmt.Errorf("failed to produce task event: %w", err)
@@ -89,7 +88,7 @@ func (ep *EventProducer) PublishCompletion(topic string, event *CompletionEvent)
 		Value: payload,
 	}
 
-	// Produce asynchronously - delivery reports will be handled by the Events() goroutine
+	
 	if err := ep.producer.Produce(msg, nil); err != nil {
 		ep.logger.Error().Err(err).Str("topic", topic).Msg("Failed to produce completion event")
 		return fmt.Errorf("failed to produce completion event: %w", err)

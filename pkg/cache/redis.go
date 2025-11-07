@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
+	config "github.com/Vighnesh-V-H/async/configs"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
@@ -17,29 +17,29 @@ var (
     redisLog *zerolog.Logger
 )
 
-func InitRedis(ctx context.Context, addr, password string, db int, log zerolog.Logger) (*redis.Client, error) {
+func InitRedis(ctx context.Context, cfg *config.RedisConfig, log zerolog.Logger) (*redis.Client, error) {
     redisLog = &log
     redisOnce.Do(func() {
         redisLog.Info().
-            Str("addr", addr).
-            Int("db", db).
+            Str("addr", cfg.Address).
+            Int("db", cfg.DB).
             Msg("Initializing Redis connection")
         
         rdb := redis.NewClient(&redis.Options{
-            Addr:         addr,
-            Password:     password,
-            DB:           db,
-            PoolSize:     20,
-            MinIdleConns: 5,
-            DialTimeout:  5 * time.Second,
-            ReadTimeout:  2 * time.Second,
-            WriteTimeout: 2 * time.Second,
+            Addr:         cfg.Address,
+            Password:     cfg.Password,
+            DB:           cfg.DB,
+            PoolSize:     cfg.PoolSize,
+            MinIdleConns: cfg.MinIdleConns,
+            DialTimeout:  cfg.DialTimeout,
+            ReadTimeout:  cfg.ReadTimeout,
+            WriteTimeout: cfg.WriteTimeout,
         })
 
         redisLog.Info().
-            Int("pool_size", 20).
-            Int("min_idle_conns", 5).
-            Dur("dial_timeout", 5*time.Second).
+            Int("pool_size", cfg.PoolSize).
+            Int("min_idle_conns", cfg.MinIdleConns).
+            Dur("dial_timeout", cfg.DialTimeout).
             Msg("Redis connection pool configured")
 
         if err := rdb.Ping(ctx).Err(); err != nil {
@@ -58,8 +58,8 @@ func InitRedis(ctx context.Context, addr, password string, db int, log zerolog.L
     return redisClient, nil
 }
 
-func GetRedis(addr, password string, db int, log zerolog.Logger) *redis.Client {
-    client, err := InitRedis(context.Background(), addr, password, db, log)
+func GetRedis(cfg *config.RedisConfig, log zerolog.Logger) *redis.Client {
+    client, err := InitRedis(context.Background(), cfg, log)
     if err != nil {
         panic(fmt.Sprintf("Failed to init Redis: %v", err))
     }

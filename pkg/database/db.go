@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
-	"time"
 
+	config "github.com/Vighnesh-V-H/async/configs"
 	"github.com/Vighnesh-V-H/async/internal/logger"
 	"github.com/rs/zerolog"
 	"gorm.io/driver/postgres"
@@ -22,13 +22,13 @@ var (
     dbLog  zerolog.Logger
 )
 
-func InitDB(ctx context.Context, connection string, logCfg logger.Config) (*gorm.DB, error) {
+func InitDB(ctx context.Context, cfg *config.DatabaseConfig, logCfg logger.Config) (*gorm.DB, error) {
     once.Do(func() {
         dbLog = logger.New(logCfg)
         dbLog.Info().Msg("Initializing database connection")
         
         var err error
-        db, err = gorm.Open(postgres.Open(connection), &gorm.Config{
+        db, err = gorm.Open(postgres.Open(cfg.URL), &gorm.Config{
             Logger: gormlogger.Default.LogMode(gormlogger.Warn),
         })
         if err != nil {
@@ -45,15 +45,17 @@ func InitDB(ctx context.Context, connection string, logCfg logger.Config) (*gorm
         }
         sqlDB = sqlDBContainer
 
-        sqlDB.SetMaxOpenConns(25)
-        sqlDB.SetMaxIdleConns(10)
-        sqlDB.SetConnMaxLifetime(5 * time.Minute)
-        sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+       
+        sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+        sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+        sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+        sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
         
         dbLog.Info().
-            Int("max_open_conns", 25).
-            Int("max_idle_conns", 10).
-            Dur("conn_max_lifetime", 5*time.Minute).
+            Int("max_open_conns", cfg.MaxOpenConns).
+            Int("max_idle_conns", cfg.MaxIdleConns).
+            Dur("conn_max_lifetime", cfg.ConnMaxLifetime).
+            Dur("conn_max_idle_time", cfg.ConnMaxIdleTime).
             Msg("Database connection pool configured")
 
         dbLog.Info().Msg("Starting database migration")
@@ -69,8 +71,8 @@ func InitDB(ctx context.Context, connection string, logCfg logger.Config) (*gorm
     return db, nil
 }
 
-func GetDB(connection string, logCfg logger.Config) *gorm.DB {
-        db ,  err := InitDB(context.Background(), connection, logCfg)
+func GetDB(cfg *config.DatabaseConfig, logCfg logger.Config) *gorm.DB {
+        db ,  err := InitDB(context.Background(), cfg, logCfg)
 		if err != nil {
             panic(fmt.Sprintf("Failed to init DB: %v", err))
         }

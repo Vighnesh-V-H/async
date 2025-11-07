@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	config "github.com/Vighnesh-V-H/async/configs"
 	"github.com/Vighnesh-V-H/async/internal/events"
 	"github.com/Vighnesh-V-H/async/internal/handler"
 	"github.com/Vighnesh-V-H/async/internal/logger"
@@ -19,137 +20,153 @@ import (
 	"github.com/Vighnesh-V-H/async/pkg/database"
 	"github.com/Vighnesh-V-H/async/pkg/kafka"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-
-	erro := godotenv.Load(".env")
-	if erro != nil {
-		log.Fatal("Error loading .env file")
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatal("Failed to load configuration:", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize logger from config
 	logCfg := logger.Config{
-		Level:  getEnv("LOG_LEVEL", "info"),
-		Format: getEnv("LOG_FORMAT", "json"),
+		Level:       cfg.Logger.Level,
+		Format:      cfg.Logger.Format,
+		ServiceName: cfg.Logger.ServiceName,
+		Environment: cfg.Logger.Environment,
+		IsProd:      cfg.Logger.IsProd,
 	}
 
-	log := logger.New(logCfg)
+	appLog := logger.New(logCfg)
 
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Error().Msg("Failed to get database url")
-	}
+	appLog.Info().
+		Str("environment", cfg.Primary.Environment).
+		Str("service", cfg.Primary.ServiceName).
+		Msg("Starting orchestrator service")
 
-	log.Info().Msg("Initializing database connection")
-
-	db, err := database.InitDB(ctx, dbURL, logCfg)
+	// Initialize database with config
+	appLog.Info().Msg("Initializing database connection")
+	db, err := database.InitDB(ctx, &cfg.Database, logCfg)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize database")
+		appLog.Fatal().Err(err).Msg("Failed to initialize database")
 	}
 
 	defer func() {
 		if err := database.CloseDB(ctx); err != nil {
-			log.Error().Err(err).Msg("Failed to close database connection")
+			appLog.Error().Err(err).Msg("Failed to close database connection")
 		}
 	}()
 
-	log.Info().Msg("Database initialized successfully")
+	appLog.Info().Msg("Database initialized successfully")
 
-	log.Info().Msg("Initializing Kafka producer")
-	kafkaProducer, err := kafka.InitProducer()
+	// Initialize Kafka producer with config
+	appLog.Info().Msg("Initializing Kafka producer")
+	kafkaProducer, err := kafka.InitProducer(&cfg.Kafka, appLog)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize Kafka producer")
+		appLog.Fatal().Err(err).Msg("Failed to initialize Kafka producer")
 	}
 	defer kafka.Close()
 
-	log.Info().Msg("Kafka producer initialized successfully")
+	appLog.Info().Msg("Kafka producer initialized successfully")
 
-	log.Info().Msg("Initializing Kafka consumer for task completions")
-	kafkaConsumer, err := kafka.InitConsumer("orchestrator-group", "task-queue")
+	// Initialize Kafka consumer with config
+	appLog.Info().Msg("Initializing Kafka consumer for task completions")
+	kafkaConsumer, err := kafka.InitConsumer(&cfg.Kafka, appLog)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize Kafka consumer")
+		appLog.Fatal().Err(err).Msg("Failed to initialize Kafka consumer")
 	}
 
-	log.Info().Msg("Kafka consumer initialized successfully")
+	appLog.Info().Msg("Kafka consumer initialized successfully")
 
+	// Initialize event handlers
 	eventProducer := events.NewEventProducer(kafkaProducer, logCfg)
 	eventConsumer := events.NewEventConsumer(kafkaConsumer, logCfg)
-	log.Info().Msg("Event producer and consumer initialized")
+	appLog.Info().Msg("Event producer and consumer initialized")
 
+	// Initialize repositories
 	workflowRepo := repositories.NewWorkflowRepository(db)
 	instanceRepo := repositories.NewInstanceRepository(db)
-	log.Info().Msg("Repositories initialized")
+	appLog.Info().Msg("Repositories initialized")
 
+	// Initialize services
 	workflowService := service.NewWorkflowService(workflowRepo)
 	instanceService := service.NewInstanceService(instanceRepo)
-	log.Info().Msg("Services initialized")
+	appLog.Info().Msg("Services initialized")
 
+	// Initialize orchestrator
 	orch := orchestrator.NewOrchestrator(workflowService, instanceService, eventProducer, logCfg)
-	log.Info().Msg("Orchestrator state machine initialized")
+	appLog.Info().Msg("Orchestrator state machine initialized")
 
+	// Initialize handlers
 	workflowHandler := handler.NewWorkflowHandler(workflowService)
 	audioHandler := handler.NewAudioHandler(workflowService, instanceService, eventProducer)
-	log.Info().Msg("Handlers initialized")
+	appLog.Info().Msg("Handlers initialized")
 
+	// Start Kafka consumer in background
 	go func() {
-		log.Info().Msg("Starting Kafka consumer for task completions")
+		appLog.Info().Msg("Starting Kafka consumer for task completions")
 		if err := eventConsumer.ConsumeCompletions(ctx, orch.ProcessCompletion); err != nil {
-			log.Error().Err(err).Msg("Kafka consumer stopped")
+			appLog.Error().Err(err).Msg("Kafka consumer stopped")
 		}
 	}()
 
+	// Setup Gin router
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	
 	ginRouter := gin.Default()
 
 	ginRouter.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"service": "orchestrator",
+			"status":      "ok",
+			"service":     cfg.Primary.ServiceName,
+			"environment": cfg.Primary.Environment,
 		})
 	})
 
 	router.SetupWorkflowRoutes(ginRouter, workflowHandler)
 	router.SetupAudioRoutes(ginRouter, audioHandler)
-	log.Info().Msg("Routes configured")
+	appLog.Info().Msg("Routes configured")
 
-	port := getEnv("PORT", "8080")
+	// Setup HTTP server with config
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: ginRouter,
+		Addr:         ":" + cfg.Server.Port,
+		Handler:      ginRouter,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
+	// Start HTTP server in background
 	go func() {
-		log.Info().Str("port", port).Msg("Starting HTTP server")
+		appLog.Info().Str("port", cfg.Server.Port).Msg("Starting HTTP server")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("Failed to start server")
+			appLog.Fatal().Err(err).Msg("Failed to start server")
 		}
 	}()
 
+	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	log.Info().Msg("Orchestrator started, waiting for shutdown signal")
+	appLog.Info().Msg("Orchestrator started, waiting for shutdown signal")
 	<-sigChan
 
-	log.Info().Msg("Shutting down gracefully...")
+	appLog.Info().Msg("Shutting down gracefully...")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Shutdown with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Server forced to shutdown")
+		appLog.Error().Err(err).Msg("Server forced to shutdown")
 	}
 
 	cancel()
-	log.Info().Msg("Orchestrator stopped")
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+	appLog.Info().Msg("Orchestrator stopped")
 }
